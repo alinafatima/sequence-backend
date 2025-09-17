@@ -21,12 +21,14 @@ export function createWebSocketServer(server: Server): WebSocketServer {
         console.log("Received message:", data);
         if (messageData.type === MessageType.JOIN_GAME) {
           addPlayerToGame(data.gameId, data.name, ws, wss);
-        }else if (messageData.type === MessageType.JOIN_TEAM) {
-          console.log("Joining team:", data);
+        } else if (messageData.type === MessageType.JOIN_TEAM) {
           joinTeam(data.gameId, data.playerId, data.team, ws, wss);
-        }else if (messageData.type === MessageType.LEAVE_TEAM) {
-          console.log("Leaving team:", data);
+        } else if (messageData.type === MessageType.LEAVE_TEAM) {
           leaveTeam(data.gameId, data.playerId, ws, wss);
+        } else if (messageData.type === MessageType.TEAM_UPDATE) {
+          sendTeamUpdate(data.gameId, wss);
+        } else if (messageData.type === MessageType.START_GAME) {
+          startGame(data.gameId, wss);
         }
       } catch (error) {
         console.error("Error parsing message:", error);
@@ -50,9 +52,6 @@ export function createWebSocketServer(server: Server): WebSocketServer {
     ws.on("error", (error: Error) => {
       console.error("WebSocket error:", error);
     });
-
-    // Send welcome message
-    ws.send("Welcome to Sequence Game WebSocket server!");
   });
 
   return wss;
@@ -102,6 +101,7 @@ async function addPlayerToGame(
       name: playerName,
       role: "player",
       gameId,
+      team: null,
     });
 
     // Save player to database
@@ -124,6 +124,7 @@ async function addPlayerToGame(
             id: savedPlayer.id,
             name: savedPlayer.name,
             role: savedPlayer.role,
+            team: savedPlayer.team,
           },
         },
         timestamp: Date.now(),
@@ -138,6 +139,7 @@ async function addPlayerToGame(
       id: player._id,
       name: player.name,
       role: player.role,
+      team: player.team,
     }));
 
     console.log("All players:", allPlayers);
@@ -154,6 +156,7 @@ async function addPlayerToGame(
                 id: savedPlayer._id,
                 name: savedPlayer.name,
                 role: savedPlayer.role,
+                team: savedPlayer.team,
               },
             },
             timestamp: Date.now(),
@@ -325,4 +328,49 @@ async function leaveTeam(
       })
     );
   }
+}
+
+async function sendTeamUpdate(gameId: string, wss: WebSocketServer) {
+  const updatedGame = await Game.findById(gameId).populate("players");
+  console.log("Game players:", updatedGame?.players);
+
+  const allPlayers = updatedGame?.players.map((player) => ({
+    id: player._id,
+    name: player.name,
+    role: player.role,
+    team: player.team,
+  }));
+
+  console.log("All players:", allPlayers);
+  // Broadcast to all clients in this game
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(
+        JSON.stringify({
+          type: MessageType.TEAM_UPDATE,
+          payload: {
+            gameId: gameId,
+            players: allPlayers,
+          },
+          timestamp: Date.now(),
+        })
+      );
+    }
+  });
+}
+
+async function startGame(gameId: string, wss: WebSocketServer) {
+  const game = await Game.findById(gameId);
+  if (!game) {
+    console.log("Game not found");
+    return;
+  }
+  game.status = "in-progress";
+  await game.save();
+  console.log("Game started:", gameId);
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: MessageType.GAME_STARTED, payload: game }));
+    }
+  });
 }

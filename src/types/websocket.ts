@@ -11,6 +11,7 @@ export enum MessageType {
   PING = 'PING',
   JOIN_TEAM = 'JOIN_TEAM',
   LEAVE_TEAM = 'LEAVE_TEAM',
+  TEAM_UPDATE = 'TEAM_UPDATE',
 
   // Server to Client
   JOIN_GAME_SUCCESS = 'JOIN_GAME_SUCCESS',
