@@ -1,9 +1,11 @@
-import ws, { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
 import { MessageType } from "./types/websocket";
-import { Player } from "./models/Player";
+import { IPlayer, Player } from "./models/Player";
 import { Game } from "./models/Game";
 import { v4 as uuidv4 } from "uuid";
+import { createBoardSlots, createDeck } from "./utils/board";
+import { Card } from "./types";
 
 export function createWebSocketServer(server: Server): WebSocketServer {
   // Create WebSocket server
@@ -365,12 +367,51 @@ async function startGame(gameId: string, wss: WebSocketServer) {
     console.log("Game not found");
     return;
   }
+  const deck = createDeck();
+  const playerCards: Card[][] = [];
+
+  for (const player of game.players) {
+    const playerHand: { rank: string; suit: string }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const randomIndex = Math.floor(Math.random() * deck.length);
+      const card = deck[randomIndex];
+      playerHand.push(card);
+      deck.splice(randomIndex, 1);
+    }
+    playerCards.push(playerHand);
+  }
   game.status = "in-progress";
+  game.gameData = {
+    deck: deck,
+    board: createBoardSlots(),
+    score: {},
+  };
+
+  const populatedGame = await Game.findById(gameId).populate("players");
+  const allPlayers = populatedGame?.players.map(
+    (player: IPlayer, index: number) => ({
+      id: player._id,
+      name: player.name,
+      role: player.role,
+      team: player.team,
+      cards: playerCards[index],
+    })
+  );
+
+  game.gameData.currentTurn =
+    (allPlayers?.[Math.floor(Math.random() * allPlayers.length)]
+      ?.id as string) || "";
+
   await game.save();
-  console.log("Game started:", gameId);
+  console.log("Game started:", game, allPlayers);
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: MessageType.GAME_STARTED, payload: game }));
+      client.send(
+        JSON.stringify({
+          type: MessageType.GAME_STARTED,
+          payload: { game, players: allPlayers },
+        })
+      );
     }
   });
 }

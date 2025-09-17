@@ -1,5 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import { IPlayer } from './Player.js';
+import { BoardSlot } from '../types';
 
 export interface IGame extends Document {
   id: string;
@@ -8,18 +9,12 @@ export interface IGame extends Document {
   host: IPlayer;
   status: 'waiting' | 'in-progress' | 'completed';
   maxPlayers: number;
-  // Future extensible fields - these can be added without breaking existing data
-  gameSettings?: {
-    difficulty?: 'easy' | 'medium' | 'hard';
-    timeLimit?: number;
-    customRules?: string;
-    [key: string]: any; // Allows for future custom settings
-  };
   gameData?: {
-    board?: any;
+    deck?: {rank: string, suit: string}[];
+    board?: BoardSlot[];
     currentTurn?: string;
     score?: { [playerId: string]: number };
-    [key: string]: any; // Allows for future game-specific data
+    [key: string]: unknown;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -47,16 +42,10 @@ const GameSchema = new Schema<IGame>({
   },
   maxPlayers: {
     type: Number,
-    default: 4,
+    default: 6,
     min: 2,
-    max: 8
+    max: 6
   },
-  // Flexible game settings for future requirements
-  gameSettings: {
-    type: Schema.Types.Mixed,
-    default: {}
-  },
-  // Flexible game data for future requirements
   gameData: {
     type: Schema.Types.Mixed,
     default: {}
@@ -65,7 +54,6 @@ const GameSchema = new Schema<IGame>({
   timestamps: true
 });
 
-// Create a virtual id field that returns the _id as a string
 GameSchema.virtual('id').get(function(this: any) {
   return this._id.toHexString();
 });
