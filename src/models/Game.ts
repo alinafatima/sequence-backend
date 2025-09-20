@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { IPlayer } from './Player.js';
+import { IPlayer } from './Player';
 import { BoardSlot } from '../types';
 
 export interface IGame extends Document {

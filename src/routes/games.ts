@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { Game } from '../models/Game.js';
-import { Player } from '../models/Player.js';
+import { Game } from '../models/Game';
+import { Player } from '../models/Player';
 
 const gamesRouter = Router();
 

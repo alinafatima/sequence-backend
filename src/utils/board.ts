@@ -76,6 +76,8 @@ export const createBoardSlots = (): BoardSlot[] => {
         col,
         cardType: isCorner ? "corner" : "regular",
         cardImage,
+        rank: boardCell?.rank || "",
+        suit: boardCell?.suit || "",
         isOccupied: false,
       };
 

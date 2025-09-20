@@ -31,6 +31,8 @@ export function createWebSocketServer(server: Server): WebSocketServer {
           sendTeamUpdate(data.gameId, wss);
         } else if (messageData.type === MessageType.START_GAME) {
           startGame(data.gameId, wss);
+        } else if (messageData.type === MessageType.GAME_MOVE) {
+          gameMove(data.gameId, data.playerId, data.slotId, ws, wss);
         }
       } catch (error) {
         console.error("Error parsing message:", error);
@@ -398,6 +400,14 @@ async function startGame(gameId: string, wss: WebSocketServer) {
     })
   );
 
+  // Save cards to each player document
+  if (populatedGame && populatedGame.players) {
+    for (let i = 0; i < populatedGame.players.length; i++) {
+      populatedGame.players[i].cards = playerCards[i];
+      await populatedGame.players[i].save();
+    }
+  }
+
   game.gameData.currentTurn =
     (allPlayers?.[Math.floor(Math.random() * allPlayers.length)]
       ?.id as string) || "";
@@ -412,6 +422,49 @@ async function startGame(gameId: string, wss: WebSocketServer) {
           payload: { game, players: allPlayers },
         })
       );
+    }
+  });
+}
+
+async function gameMove(gameId: string, playerId: string, slotId: string, ws: WebSocket, wss: WebSocketServer) {
+  const game = await Game.findById(gameId);
+  if (!game) {
+    console.log("Game not found");
+    return;
+  }
+
+  const player = await Player.findById(playerId);
+  if (!player) {
+    console.log("Player not found");
+    return;
+  }
+  const slot = game.gameData?.board?.find((slot) => slot.id === slotId);
+  if (!slot) {
+    console.log("Slot not found");
+    return;
+  }
+
+  slot.isOccupied = true;
+  slot.chipColor = player.team?.toLowerCase() as "red" | "blue" | "green";
+  const [slotRank, slotSuit] = slot.cardImage.split('-');
+  player.cards = player?.cards?.filter((card) => !(card.rank === slotRank && card.suit === slotSuit));
+
+  const newCard = game.gameData?.deck?.pop();
+  if (newCard) {
+    player?.cards?.push(newCard);
+  }
+
+  game.markModified('gameData');
+  player.markModified('cards');
+  await game.save();
+  await player.save(); 
+
+  //give turn to next player
+
+  console.log('Game moved:', game, player);
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: MessageType.GAME_MOVE, payload: { game, player } }));
     }
   });
 }

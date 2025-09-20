@@ -40,7 +40,14 @@ app.use('/api/games', gamesRouter);
 const server = createServer(app);
 
 // Create WebSocket server
-const wss = createWebSocketServer(server);
+let wss;
+try {
+  wss = createWebSocketServer(server);
+  console.log('✅ WebSocket server created successfully');
+} catch (error) {
+  console.error('❌ Failed to create WebSocket server:', error);
+  process.exit(1);
+}
 
 // Start the server
 const startServer = async () => {

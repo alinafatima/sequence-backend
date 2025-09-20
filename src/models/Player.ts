@@ -6,6 +6,7 @@ export interface IPlayer extends Document {
   role: 'host' | 'player';
   gameId: string;
   team: 'red' | 'blue' | 'green' | null;
+  cards?: {rank: string, suit: string}[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,7 +33,13 @@ const PlayerSchema = new Schema<IPlayer>({
     type: String,
     enum: ['red', 'blue', 'green'],
     default: null
-  }
+  },
+  cards: [{
+    type: {
+      rank: String,
+      suit: String
+    }
+  }]
 }, {
   timestamps: true
 });

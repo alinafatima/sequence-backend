@@ -8,7 +8,10 @@ export interface BoardSlot {
   col: number;
   cardType: "corner" | "regular";
   cardImage: string;
+  rank: string;
+  suit: string;
   isOccupied: boolean;
+  chipColor?: "red" | "blue" | "green";
 }
 export interface Player {
   id: string;
