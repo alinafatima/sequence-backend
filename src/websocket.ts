@@ -7,6 +7,88 @@ import { v4 as uuidv4 } from "uuid";
 import { createBoardSlots, createDeck } from "./utils/board";
 import { Card } from "./types";
 
+// Utility function to arrange players in RGB order
+function arrangePlayersInRGBOrder(players: any[]): any[] {
+  // Group players by team
+  const teamGroups: { [key: string]: any[] } = {
+    red: [],
+    green: [],
+    blue: [],
+  };
+
+  // Separate players with teams and without teams
+  const playersWithoutTeam: any[] = [];
+
+  players.forEach((player) => {
+    if (player.team && teamGroups[player.team]) {
+      teamGroups[player.team].push(player);
+    } else {
+      playersWithoutTeam.push(player);
+    }
+  });
+
+  // Get available teams in RGB order
+  const availableTeams = ["red", "green", "blue"].filter(
+    (team) => teamGroups[team].length > 0
+  );
+
+  // If no teams are assigned, return original order
+  if (availableTeams.length === 0) {
+    return players;
+  }
+
+  // Arrange players in RGB order
+  const arrangedPlayers: any[] = [];
+  let maxPlayersInAnyTeam = Math.max(
+    ...availableTeams.map((team) => teamGroups[team].length)
+  );
+
+  // Round-robin through teams in RGB order
+  for (let i = 0; i < maxPlayersInAnyTeam; i++) {
+    availableTeams.forEach((team) => {
+      if (teamGroups[team][i]) {
+        arrangedPlayers.push(teamGroups[team][i]);
+      }
+    });
+  }
+
+  // Add players without teams at the end
+  arrangedPlayers.push(...playersWithoutTeam);
+
+  return arrangedPlayers;
+}
+
+// Helper function to update database with RGB-ordered players
+async function updateGamePlayersInRGBOrder(gameId: string): Promise<void> {
+  try {
+    const game = await Game.findById(gameId).populate("players");
+    if (!game) {
+      console.log("Game not found for RGB ordering update");
+      return;
+    }
+
+    const allPlayers = game.players.map((player) => ({
+      _id: player._id,
+      id: player._id,
+      name: player.name,
+      role: player.role,
+      team: player.team,
+    }));
+
+    // Arrange players in RGB order
+    const arrangedPlayers = arrangePlayersInRGBOrder(allPlayers);
+
+    // Update the game's players array with the RGB-ordered player IDs
+    const orderedPlayerIds = arrangedPlayers.map((player) => player._id);
+    game.players = orderedPlayerIds;
+
+    await game.save();
+    console.log("Updated game players in RGB order:", orderedPlayerIds);
+  } catch (error) {
+    console.error("Error updating game players in RGB order:", error);
+  }
+}
+
 export function createWebSocketServer(server: Server): WebSocketServer {
   // Create WebSocket server
   const wss = new WebSocketServer({ server });
@@ -118,6 +200,9 @@ async function addPlayerToGame(
 
     console.log("Player added to game:", gameId);
 
+    // Update database with RGB-ordered players
+    await updateGamePlayersInRGBOrder(gameId);
+
     // Send success response
     ws.send(
       JSON.stringify({
@@ -135,7 +220,7 @@ async function addPlayerToGame(
       })
     );
 
-    // Get the updated game with populated players
+    // Get the updated game with populated players (now in RGB order)
     const updatedGame = await Game.findById(gameId).populate("players");
     console.log("Game players:", updatedGame?.players);
 
@@ -146,7 +231,7 @@ async function addPlayerToGame(
       team: player.team,
     }));
 
-    console.log("All players:", allPlayers);
+    console.log("All players (RGB ordered):", allPlayers);
     // Broadcast to all clients in this game
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
@@ -222,6 +307,9 @@ async function joinTeam(
 
     console.log("Joining team:", gameId, playerId, team);
 
+    // Update database with RGB-ordered players
+    await updateGamePlayersInRGBOrder(gameId);
+
     ws.send(
       JSON.stringify({
         type: MessageType.JOIN_TEAM_SUCCESS,
@@ -229,6 +317,8 @@ async function joinTeam(
         timestamp: Date.now(),
       })
     );
+
+    // Get the updated game with populated players (now in RGB order)
     const updatedGame = await Game.findById(gameId).populate("players");
     const allPlayers = updatedGame?.players.map((player) => ({
       id: player._id,
@@ -236,7 +326,8 @@ async function joinTeam(
       role: player.role,
       team: player.team,
     }));
-    console.log("All players:", allPlayers);
+
+    console.log("All players (RGB ordered):", allPlayers);
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(
@@ -297,6 +388,9 @@ async function leaveTeam(
 
     console.log("Leaving team:", gameId, playerId);
 
+    // Update database with RGB-ordered players
+    await updateGamePlayersInRGBOrder(gameId);
+
     ws.send(
       JSON.stringify({
         type: MessageType.LEAVE_TEAM_SUCCESS,
@@ -304,6 +398,8 @@ async function leaveTeam(
         timestamp: Date.now(),
       })
     );
+
+    // Get the updated game with populated players (now in RGB order)
     const updatedGame = await Game.findById(gameId).populate("players");
     const allPlayers = updatedGame?.players.map((player) => ({
       id: player._id,
@@ -311,7 +407,8 @@ async function leaveTeam(
       role: player.role,
       team: player.team,
     }));
-    console.log("All players:", allPlayers);
+
+    console.log("All players (RGB ordered):", allPlayers);
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(
@@ -335,6 +432,9 @@ async function leaveTeam(
 }
 
 async function sendTeamUpdate(gameId: string, wss: WebSocketServer) {
+  // Update database with RGB-ordered players first
+  await updateGamePlayersInRGBOrder(gameId);
+
   const updatedGame = await Game.findById(gameId).populate("players");
   console.log("Game players:", updatedGame?.players);
 
@@ -345,7 +445,7 @@ async function sendTeamUpdate(gameId: string, wss: WebSocketServer) {
     team: player.team,
   }));
 
-  console.log("All players:", allPlayers);
+  console.log("All players (RGB ordered):", allPlayers);
   // Broadcast to all clients in this game
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
@@ -389,6 +489,9 @@ async function startGame(gameId: string, wss: WebSocketServer) {
     score: {},
   };
 
+  // Update database with RGB-ordered players before starting game
+  await updateGamePlayersInRGBOrder(gameId);
+
   const populatedGame = await Game.findById(gameId).populate("players");
   const allPlayers = populatedGame?.players.map(
     (player: IPlayer, index: number) => ({
@@ -400,7 +503,7 @@ async function startGame(gameId: string, wss: WebSocketServer) {
     })
   );
 
-  // Save cards to each player document
+  // Save cards to each player document (players are now in RGB order)
   if (populatedGame && populatedGame.players) {
     for (let i = 0; i < populatedGame.players.length; i++) {
       populatedGame.players[i].cards = playerCards[i];
@@ -408,9 +511,7 @@ async function startGame(gameId: string, wss: WebSocketServer) {
     }
   }
 
-  game.gameData.currentTurn =
-    (allPlayers?.[Math.floor(Math.random() * allPlayers.length)]
-      ?.id as string) || "";
+  game.gameData.currentTurn = (allPlayers?.[0]?.id as string) || "";
 
   await game.save();
   console.log("Game started:", game, allPlayers);
@@ -426,7 +527,13 @@ async function startGame(gameId: string, wss: WebSocketServer) {
   });
 }
 
-async function gameMove(gameId: string, playerId: string, slotId: string, ws: WebSocket, wss: WebSocketServer) {
+async function gameMove(
+  gameId: string,
+  playerId: string,
+  slotId: string,
+  ws: WebSocket,
+  wss: WebSocketServer
+) {
   const game = await Game.findById(gameId);
   if (!game) {
     console.log("Game not found");
@@ -446,25 +553,51 @@ async function gameMove(gameId: string, playerId: string, slotId: string, ws: We
 
   slot.isOccupied = true;
   slot.chipColor = player.team?.toLowerCase() as "red" | "blue" | "green";
-  const [slotRank, slotSuit] = slot.cardImage.split('-');
-  player.cards = player?.cards?.filter((card) => !(card.rank === slotRank && card.suit === slotSuit));
+  const [slotRank, slotSuit] = slot.cardImage.split("-");
+  player.cards = player?.cards?.filter(
+    (card) => !(card.rank === slotRank && card.suit === slotSuit)
+  );
 
   const newCard = game.gameData?.deck?.pop();
   if (newCard) {
     player?.cards?.push(newCard);
   }
 
-  game.markModified('gameData');
-  player.markModified('cards');
+  game.markModified("gameData");
+  player.markModified("cards");
   await game.save();
-  await player.save(); 
+  await player.save();
 
   //give turn to next player
+  const currentIndex = game.players.findIndex(
+    (playerIdInArray) => playerIdInArray.toString() === playerId
+  );
+  const nextIndex = (currentIndex + 1) % game.players.length;
+  game.gameData!.currentTurn = game.players[nextIndex].toString();
 
-  console.log('Game moved:', game, player);
+  game.markModified("gameData");
+  await game.save();
+
+  // Populate players to get their details
+  const populatedGame = await Game.findById(gameId).populate("players");
+  const allPlayers = populatedGame?.players.map((player) => ({
+    id: player._id,
+    name: player.name,
+    role: player.role,
+    team: player.team,
+    cards: player.cards,
+  }));
+
+  console.log("Game moved:", game, allPlayers);
+
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: MessageType.GAME_MOVE, payload: { game, player } }));
+      client.send(
+        JSON.stringify({
+          type: MessageType.GAME_MOVE,
+          payload: { game, players: allPlayers },
+        })
+      );
     }
   });
 }
